@@ -1,0 +1,115 @@
+---
+title: "Time series forecast"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## A general framework of ARIMA time series modeling.
+
+ARIMA models are often used to fit a model to a time series and use it to make future predictions.
+ARIMA models have three parameters:
+
+ - AR: Auto-Regressive parameter, at each time the model will depent on the previous value(s). The correlation declines gradually at each time.
+ - I: Integration parameter. Differencing is used to remove non-stationarity in a time serie. A time series is stationary if the mean, variance and autocorrelation structure do not change over time.
+ - MA: Moving Average parameter, the output depends linearly on the current and various past values. The correlation between two time steps is zero.
+
+Also this models will be dependent on the seasonality of the time series too. This analysis tries to follows the rules given in [this](http://people.duke.edu/~rnau/arimrule.htm) link for identifying ARIMA models.
+
+
+### Visualizing the time series.
+
+The first step to extract some knowledge of the data is to visualize it. Monthly deaths from lung diseases in the UK (ldeaths) is a time series giving the monthly deaths from bronchitis, emphysema and asthma in the UK from 1974 to 1979 ([link](https://stat.ethz.ch/R-manual/R-devel/library/datasets/html/UKLungDeaths.html))
+
+```{r Dataset, echo=FALSE}
+plot(ldeaths)
+```
+
+```{r summary}
+summary(ldeaths)
+```
+
+### Stationarize the time series (if needed)
+
+Using the Augmented Dickey--Fuller test for unit roots from [fUnitRoots](https://cran.r-project.org/web/packages/fUnitRoots/) to check if the serie accomplish the stationarity needed to apply ARIMA. Null hypothesis rejected implies that the time series is stationary.
+
+```{r include=FALSE, cache=FALSE}
+# Using fUnitRoots packages 
+library(fUnitRoots)
+```
+
+```{r}
+adfTest(ldeaths)
+```
+
+The time series studied seems to be stationary. There is no need to stationarize it to apply ARMA models (I = 0). 
+
+
+### Finding optimal parameters to ARMA model.
+
+Plotting the Auto-correlation Function (ACF) and the Partial ACF helps to identify the ARMA parameters.
+
+diff function in [timeSeries](https://cran.r-project.org/web/packages/timeSeries/index.html) package is used to find the differencing order if is needed.
+
+```{r echo=FALSE}
+acf(ldeaths, lag.max = 30)
+acf(ldeaths, lag.max = 30, plot = FALSE)
+pacf(ldeaths, lag.max = 30)
+pacf(ldeaths, lag.max = 30, plot = FALSE)
+```
+
+The PACF shows possibility to have an AR process with one term. Let's consider this value. 
+
+### Looking for seasonality
+
+The time series has a 12 month cycle in a year.
+
+```{r}
+cycle(ldeaths)
+frequency(ldeaths)
+```
+
+The boxplots give us a sense of strong seasonal effect reinforced by the ACF plot.
+
+```{r echo=TRUE}
+boxplot(ldeaths~cycle(ldeaths))
+```
+
+Applying the rules one order of seasonal differencing could be used (or not) and one or more orders of SAR too.
+
+### Fitting the model.
+
+Usually it is necessary to prove more than one combination of parameters given the analysis made using ACF and PACF functions and selects the best model in base of their AIC (Akaike information criterion). I'm only using one combination sugested by the previous analysis.
+
+```{r}
+fit <- arima(ldeaths, c(1, 0, 0),seasonal = list(order = c(1, 1, 0), period = 12))
+fit$aic
+```
+
+### Predicting future outcomes.
+
+Future predictions can be made using the model.
+
+```{r }
+pred <- predict(fit, n.ahead = 5*12)
+ts.plot(ldeaths,pred$pred, log = "y", lty = c(1,3))
+```
+
+### Auto-fitting ARIMA models
+
+[Forecast](https://cran.r-project.org/web/packages/forecast/) package bings the functionality of aotomatically estimate the arima parameters and compare between several models to select the best.
+
+```{r include=FALSE, cache=FALSE}
+library(forecast)
+```
+
+Given the knowledge of the time serie there is parameters that could be passed to the auto.arima method to reduce the search space of the method.
+
+```{r}
+autoFit <- auto.arima(ldeaths,trace = TRUE, seasonal = TRUE, stationary = TRUE)
+plot(forecast(autoFit,h=5*12))
+```
+
+The results shows the best model and the forecast made.
